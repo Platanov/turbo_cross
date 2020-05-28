@@ -1,4 +1,10 @@
-import { sum_array, getMousePos, factorial, randint, animated_grid } from "./picross_functions";
+import {
+  sum_array,
+  getMousePos,
+  factorial,
+  randint,
+  animated_grid
+} from "./picross_functions";
 
 import {
   mouse_object,
@@ -54,11 +60,23 @@ var click_at = [0, 0];
 
 var eye_catch_bg = new Image();
 eye_catch_bg.src = "src/graphics/eye_catch_bg.png";
-var eye_catch_sprite = new sprite(eye_catch_bg, 0, 0, screen_size[0], screen_size[1]);
+var eye_catch_sprite = new sprite(
+  eye_catch_bg,
+  0,
+  0,
+  screen_size[0],
+  screen_size[1]
+);
 
 var main_menu_bg = new Image();
 main_menu_bg.src = "src/graphics/main_menu_bg.png";
-var main_menu_sprite = new sprite(main_menu_bg, 0, 0, screen_size[0], screen_size[1]);
+var main_menu_sprite = new sprite(
+  main_menu_bg,
+  0,
+  0,
+  screen_size[0],
+  screen_size[1]
+);
 
 var main_menu_buttons_sheet = new Image();
 main_menu_buttons_sheet.src = "src/graphics/main_menu_buttons.png";
@@ -125,7 +143,8 @@ var hp_sprites = {
 var main_game_object = new game_object();
 // Main menu init stuff.
 var main_menu_single_player_button_pos = [560, 380];
-var main_menu_multi_player_button_pos = [560, 500];
+var main_menu_multi_player_host_button_pos = [560, 500];
+var main_menu_multi_player_join_button_pos = [560, 740];
 var main_menu_options_button_pos = [880, 620];
 var main_menu_button_single_player_last_frame = 0;
 var main_menu_button_multi_player_last_frame = 0;
@@ -139,11 +158,19 @@ var main_menu_buttons = {
     main_menu_buttons_sprites.sp_up.width,
     main_menu_buttons_sprites.sp_up.height
   ),
-  multi_player: new button(
+  multi_player_host: new button(
     main_menu_buttons_sprites.mp_up,
     main_menu_buttons_sprites.mp_dn,
-    main_menu_multi_player_button_pos[0],
-    main_menu_multi_player_button_pos[1],
+    main_menu_multi_player_host_button_pos[0],
+    main_menu_multi_player_host_button_pos[1],
+    main_menu_buttons_sprites.mp_up.width,
+    main_menu_buttons_sprites.mp_up.height
+  ),
+  multi_player_join: new button(
+    main_menu_buttons_sprites.mp_up,
+    main_menu_buttons_sprites.mp_dn,
+    main_menu_multi_player_join_button_pos[0],
+    main_menu_multi_player_join_button_pos[1],
     main_menu_buttons_sprites.mp_up.width,
     main_menu_buttons_sprites.mp_up.height
   ),
@@ -185,10 +212,23 @@ var single_player_pause_buttons_main_menu_pos = [300, 340];
 var single_player_pause_buttons_etc_pos = [300, 436];
 var single_player_pause_buttons_unpause = [748, 532];
 var single_player_pause_buttons_sheet = new Image();
-single_player_pause_buttons_sheet.src = "src/graphics/single_player_pause_buttons.png";
+single_player_pause_buttons_sheet.src =
+  "src/graphics/single_player_pause_buttons.png";
 var single_player_pause_buttons_sprites = {
-  return_to_main_menu_up: new sprite(single_player_pause_buttons_sheet, 0, 0, 512, 64),
-  return_to_main_menu_dn: new sprite(single_player_pause_buttons_sheet, 0, 64, 512, 64),
+  return_to_main_menu_up: new sprite(
+    single_player_pause_buttons_sheet,
+    0,
+    0,
+    512,
+    64
+  ),
+  return_to_main_menu_dn: new sprite(
+    single_player_pause_buttons_sheet,
+    0,
+    64,
+    512,
+    64
+  ),
   etc_up: new sprite(single_player_pause_buttons_sheet, 0, 128, 512, 64),
   etc_dn: new sprite(single_player_pause_buttons_sheet, 0, 192, 512, 64),
   unpause_up: new sprite(single_player_pause_buttons_sheet, 0, 256, 64, 64),
@@ -260,6 +300,7 @@ var x = 0;
 var y = 0;
 var z = 0;
 var done = false;
+var downloaded_solution = {};
 
 // ******************************
 // Our good friend, the main game loop.
@@ -295,7 +336,8 @@ function main_loop(timestamp) {
 
   if (main_game_object.current_state == "main_menu") {
     main_menu_buttons.single_player.update(mouse_state);
-    main_menu_buttons.multi_player.update(mouse_state);
+    main_menu_buttons.multi_player_host.update(mouse_state);
+    main_menu_buttons.multi_player_join.update(mouse_state);
     main_menu_buttons.options.update(mouse_state);
 
     if (main_menu_buttons.single_player.clicked) {
@@ -303,13 +345,56 @@ function main_loop(timestamp) {
       mouse_state.mouse1_click_start = 0;
       mouse_state.mouse2_click_start = 0;
       main_menu_buttons.single_player.clicked = false;
+      main_game_object.network_mode = "offline";
     }
+
+    if (main_menu_buttons.multi_player_host.clicked) {
+      main_game_object.set_state("single_player");
+      mouse_state.mouse1_click_start = 0;
+      mouse_state.mouse2_click_start = 0;
+      main_menu_buttons.multi_player_host.clicked = false;
+      main_game_object.network_mode = "host";
+    }
+
+    if (main_menu_buttons.multi_player_join.clicked) {
+      main_game_object.set_state("joining");
+      mouse_state.mouse1_click_start = 0;
+      mouse_state.mouse2_click_start = 0;
+      main_menu_buttons.multi_player_join.clicked = false;
+      main_game_object.network_mode = "join";
+    }
+  }
+
+  if (main_game_object.current_state == "joining") {
+    console.log("Let's join!");
+    var xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() {
+      if (this.readyState == 4 && this.status == 200) {
+        //copy the board from the server
+        console.log(this.response);
+        var packet = JSON.parse(this.response);
+        downloaded_solution = packet.solution;
+        main_game_object.set_state("single_player");
+      }
+    };
+    xhttp.open(
+      "POST",
+      "https://www.superjer.com/turbocross/api.php?network_mode=join",
+      true
+    );
+    xhttp.send("{}");
+    main_game_object.set_state("waiting");
+  }
+
+  if (main_game_object.current_state == "waiting") {
+    console.log("Waiting...");
   }
 
   if (main_game_object.current_state == "single_player") {
     if (main_game_object.need_board) {
       single_player_buttons.new_board.clicked = false;
       current_sp_board = new game_board();
+      // fixme: avoid generating a solution in join mode
       current_sp_board.setup_board(
         main_game_object.sp_board_size,
         main_game_object.sp_board_size,
@@ -319,6 +404,31 @@ function main_loop(timestamp) {
         board_grid_sheet,
         board_countdown_sheet
       );
+
+      if (main_game_object.network_mode == "host") {
+        var xhttp = new XMLHttpRequest();
+        xhttp.onreadystatechange = function() {
+          if (this.readyState == 4 && this.status == 200) {
+            //here's where to respond to an error
+            var resp = JSON.parse(this.response);
+            console.log(resp.status); // example check if == success?
+          }
+        };
+        xhttp.open(
+          "POST",
+          "https://www.superjer.com/turbocross/api.php?network_mode=host",
+          true
+        );
+        var packet = {
+          solution: current_sp_board.solution
+        };
+        xhttp.send(JSON.stringify(packet));
+      } else if (main_game_object.network_mode == "join") {
+        //board already loaded during "waiting" state
+        current_sp_board.solution = downloaded_solution;
+        current_sp_board.update_hints();
+      }
+
       // current_sp_board.position = main_game_object.sp_board_location;
       current_sp_hp_tracker = new hp_tracker();
       current_sp_hp_tracker.position = main_game_object.sp_hp_location;
@@ -331,7 +441,11 @@ function main_loop(timestamp) {
 
     if (!current_sp_board.complete && current_sp_hp_tracker.player_hp > 0) {
       if (mouse_state.mouse1_click_hold == 1) {
-        current_sp_board.click_left(mouse_state.mouse_pos_frame, mouse_state, current_sp_hp_tracker);
+        current_sp_board.click_left(
+          mouse_state.mouse_pos_frame,
+          mouse_state,
+          current_sp_hp_tracker
+        );
       }
 
       if (mouse_state.mouse2_click_hold == 1) {
@@ -350,7 +464,11 @@ function main_loop(timestamp) {
     current_sp_hp_tracker.update();
 
     current_sp_board.update(delta, mouse_state);
-    if (!current_sp_board.complete && current_sp_hp_tracker.player_hp > 0 && current_sp_board.intro_state == 0) {
+    if (
+      !current_sp_board.complete &&
+      current_sp_hp_tracker.player_hp > 0 &&
+      current_sp_board.intro_state == 0
+    ) {
       current_sp_timer.active = true;
       current_sp_timer.update(delta);
     }
@@ -409,7 +527,8 @@ function main_loop(timestamp) {
   if (main_game_object.current_state == "main_menu") {
     main_menu_sprite.draw(ctx, 0, 0);
     main_menu_buttons.single_player.draw(ctx);
-    main_menu_buttons.multi_player.draw(ctx);
+    main_menu_buttons.multi_player_host.draw(ctx);
+    main_menu_buttons.multi_player_join.draw(ctx);
     main_menu_buttons.options.draw(ctx);
   }
 
@@ -456,3 +575,4 @@ function main_loop(timestamp) {
 }
 
 requestAnimationFrame(main_loop);
+
